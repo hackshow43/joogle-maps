@@ -30,9 +30,8 @@ html,body{height:100%;margin:0;font-family:'Inter',sans-serif;background:var(--i
 }
 .brand-mark{
   width:34px;height:34px;border-radius:50%;
-  background:conic-gradient(from 220deg, var(--amber), var(--trail) 40%, var(--amber-soft) 75%, var(--amber));
-  display:flex;align-items:center;justify-content:center;
-  font-family:'Space Grotesk',sans-serif; font-weight:700; color:var(--ink); font-size:16px;
+  object-fit:cover; display:block; flex-shrink:0;
+  background:var(--ink-soft);
 }
 .brand-text{font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:17px; letter-spacing:0.2px;}
 .brand-text small{display:block; font-family:'JetBrains Mono',monospace; font-weight:400; font-size:9.5px; letter-spacing:1px; color:var(--sage); text-transform:uppercase; margin-top:1px;}
