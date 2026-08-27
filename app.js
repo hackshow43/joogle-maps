@@ -1,4 +1,9 @@
 import { firebaseConfig } from './firebase-config.js';
+console.log('Joogle Maps app.js: build-check-v3');
+document.addEventListener('DOMContentLoaded', () => {
+  const credit = document.querySelector('.credit');
+  if (credit) credit.textContent += ' · build v3';
+});
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js';
 import {
   getAuth, onAuthStateChanged, signInAnonymously
