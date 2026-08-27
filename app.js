@@ -66,9 +66,36 @@ function starSvg(filled){
   return `<svg width="15" height="15" viewBox="0 0 24 24" fill="${filled ? '#E8871E' : 'none'}" stroke="${filled ? '#E8871E' : 'currentColor'}" stroke-width="2"><polygon points="12 2 15.1 8.6 22 9.6 17 14.6 18.2 21.5 12 18.1 5.8 21.5 7 14.6 2 9.6 8.9 8.6 12 2"/></svg>`;
 }
 
+// Nominatim gives a full address string plus a structured breakdown (addressdetails=1).
+// The breakdown lets us show "14 East 7th Avenue" as the headline instead of just the
+// house number, and "Mount Pleasant, Vancouver" as a secondary line for context.
+function resultName(d){
+  const a = d.address || {};
+  if(a.house_number && a.road) return `${a.house_number} ${a.road}`;
+  if(a.road) return a.road;
+  if(d.name) return d.name;
+  return d.display_name.split(',')[0];
+}
+function resultSecondary(d){
+  const a = d.address || {};
+  const locality = a.neighbourhood || a.suburb || a.city_district;
+  const city = a.city || a.town || a.village || a.county;
+  const region = a.state;
+  const parts = [locality, city, !city && region ? region : null].filter(Boolean);
+  if(parts.length) return parts.join(', ');
+  // Fall back to everything after the first comma if we have no structured address
+  const rest = d.display_name.split(',').slice(1, 3).join(',').trim();
+  return rest || (d.type||'place').replace(/_/g,' ');
+}
+
 function runSearch(q){
   if(!q || q.length < 3){ resultsBox.classList.remove('show'); resultsBox.innerHTML=''; return; }
-  fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=0&limit=6&q=${encodeURIComponent(q)}`)
+  // Bias toward what's currently on screen (bounded=0 = preference, not a hard filter) so
+  // "14 E 7th Ave" while looking at Vancouver ranks the Vancouver match first, without
+  // hiding a genuinely better match elsewhere if nothing local fits.
+  const b = map.getBounds();
+  const viewbox = `${b.getWest()},${b.getNorth()},${b.getEast()},${b.getSouth()}`;
+  fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&viewbox=${viewbox}&bounded=0&q=${encodeURIComponent(q)}`)
     .then(r=>r.json())
     .then(data=>{
       if(!data.length){ resultsBox.innerHTML = '<div class="result-item"><span class="r-info"><span class="r-name">No spots found.</span><span class="r-type">try a broader search</span></span></div>'; resultsBox.classList.add('show'); return; }
@@ -77,8 +104,8 @@ function runSearch(q){
         const isSaved = savedPlaceKeys.has(key);
         return `<div class="result-item" data-idx="${i}">
           <span class="r-info">
-            <span class="r-name">${d.display_name.split(',')[0]}</span>
-            <span class="r-type">${(d.type||'place').replace(/_/g,' ')}</span>
+            <span class="r-name">${resultName(d)}</span>
+            <span class="r-type">${resultSecondary(d)}</span>
           </span>
           <button class="icon-btn ${isSaved?'saved':''}" data-save-idx="${i}" title="Save place">${starSvg(isSaved)}</button>
         </div>`;
@@ -104,19 +131,20 @@ resultsBox.addEventListener('click', (e)=>{
 
   if(saveBtn){
     const d = data[parseInt(saveBtn.dataset.saveIdx)];
-    toggleSavePlace({ name: d.display_name.split(',')[0], address: d.display_name, lat: +d.lat, lon: +d.lon }, saveBtn);
+    toggleSavePlace({ name: resultName(d), address: d.display_name, lat: +d.lat, lon: +d.lon }, saveBtn);
     return;
   }
   if(item && item.dataset.idx !== undefined){
     const d = data[parseInt(item.dataset.idx)];
     const lat = +d.lat, lon = +d.lon;
+    const name = resultName(d);
     if(searchMarker) map.removeLayer(searchMarker);
     searchMarker = L.marker([lat,lon], {icon:amberPin}).addTo(map)
-      .bindPopup(popupHtml(d.display_name.split(',')[0], d.display_name, lat, lon)).openPopup();
+      .bindPopup(popupHtml(name, d.display_name, lat, lon)).openPopup();
     map.setView([lat,lon], 15, {animate:true});
     resultsBox.classList.remove('show');
-    searchInput.value = d.display_name.split(',')[0];
-    logSearchHistory({ name: d.display_name.split(',')[0], lat, lon });
+    searchInput.value = name;
+    logSearchHistory({ name, lat, lon });
   }
 });
 
