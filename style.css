@@ -27,27 +27,32 @@ html,body{height:100%;margin:0;font-family:'Inter',sans-serif;background:var(--i
   border-radius:999px;
   box-shadow:var(--shadow);
   border:1px solid rgba(159,184,168,0.25);
+  max-width:calc(100vw - 36px);
+  overflow:hidden;
+  transition:padding .15s ease;
 }
 .brand-mark{
   width:34px;height:34px;border-radius:50%;
   object-fit:cover; display:block; flex-shrink:0;
   background:var(--ink-soft);
 }
-.brand-text{font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:17px; letter-spacing:0.2px;}
+.brand-text{font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:17px; letter-spacing:0.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .brand-text small{display:block; font-family:'JetBrains Mono',monospace; font-weight:400; font-size:9.5px; letter-spacing:1px; color:var(--sage); text-transform:uppercase; margin-top:1px;}
 
 /* ---------- Search ---------- */
 .search-wrap{
   position:absolute; top:18px; left:50%; transform:translateX(-50%);
   z-index:10; width:min(480px, 55vw);
+  transition:width .15s ease;
 }
 .search-box{
   display:flex; align-items:center; gap:10px;
   background:var(--chalk); border-radius:999px; padding:12px 18px;
   box-shadow:var(--shadow); border:1px solid rgba(22,35,43,0.06);
+  transition:padding .15s ease;
 }
 .search-box input{
-  flex:1; border:none; outline:none; background:transparent;
+  flex:1; min-width:0; border:none; outline:none; background:transparent;
   font-family:'Inter',sans-serif; font-size:14.5px; color:var(--ink);
 }
 .search-box input::placeholder{color:#8a938f;}
@@ -178,8 +183,20 @@ html,body{height:100%;margin:0;font-family:'Inter',sans-serif;background:var(--i
 .panel-item .pi-del{background:none; border:none; color:#8a938f; cursor:pointer; font-size:15px; flex-shrink:0;}
 .panel-item .pi-del:hover{color:var(--danger);}
 
-@media (max-width: 720px){
-  .search-wrap{width:calc(100vw - 100px);}
+@media (max-width: 1100px){
+  .search-wrap{width:min(400px, calc(100vw - 470px));}
   .brand-text small{display:none;}
+}
+
+@media (max-width: 680px){
+  .brand{padding:6px; gap:0;}
+  .brand-text{display:none;}
+  .brand-mark{width:32px; height:32px;}
+  .search-wrap{width:calc(100vw - 152px); max-width:340px;}
+  .search-box{padding:10px 14px; gap:8px;}
+  .search-box input{font-size:13.5px;}
+}
+
+@media (max-width: 720px){
   .panel{width:88vw; right:-88vw;}
 }
