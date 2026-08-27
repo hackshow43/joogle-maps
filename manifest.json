@@ -1,0 +1,15 @@
+{
+  "name": "Joogle Maps",
+  "short_name": "Joogle",
+  "description": "OpenStreetMap with flair — saved places, route history, and shareable trips.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16232B",
+  "theme_color": "#16232B",
+  "orientation": "any",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
