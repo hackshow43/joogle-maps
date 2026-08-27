@@ -2,10 +2,10 @@
 // This is safe to commit/publish — Firebase web config is not a secret; access is controlled by
 // your Firestore security rules and Auth settings, not by hiding these values.
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCwasOQ3hGEIUHvorQbs5Lx-jkI4ptg-kg",
+  authDomain: "joogle-maps.firebaseapp.com",
+  projectId: "joogle-maps",
+  storageBucket: "joogle-maps.firebasestorage.app",
+  messagingSenderId: "637430117757",
+  appId: "1:637430117757:web:58a5edfbbac1fc13f00814"
 };
