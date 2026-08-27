@@ -1,11 +1,16 @@
-// Plain classic scripts (no type="module") — this is deliberate. ES module imports get
-// blocked by the browser when a page is opened straight from disk (file://) or from any
-// preview surface that doesn't serve it as a real HTTP origin. The Firebase "compat" build
-// works as ordinary globals instead, so this app runs the same whether it's double-clicked
-// locally, dropped in a sandbox preview, or deployed to GitHub Pages.
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+import { firebaseConfig } from './firebase-config.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js';
+import {
+  getAuth, onAuthStateChanged, signInAnonymously
+} from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js';
+import {
+  getFirestore, collection, addDoc, deleteDoc, doc, getDoc,
+  query, where, orderBy, onSnapshot, serverTimestamp, limit
+} from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js';
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 let currentUser = null;
 let savedPlaceKeys = new Set(); // `${lat.toFixed(5)},${lon.toFixed(5)}` for quick star-state lookup
@@ -13,7 +18,7 @@ let savedPlaceKeys = new Set(); // `${lat.toFixed(5)},${lon.toFixed(5)}` for qui
 // No login screen: every visitor is signed in anonymously behind the scenes so their
 // saved places / history / shared routes persist in Firestore, scoped to this browser.
 // Clearing site data or switching browsers starts a fresh, empty "account".
-auth.signInAnonymously().catch(err => console.error('Anonymous sign-in failed:', err));
+signInAnonymously(auth).catch(err => console.error('Anonymous sign-in failed:', err));
 
 // ---------------- Map setup ----------------
 const map = L.map('map', { zoomControl:false }).setView([49.1579, -121.9514], 12); // Chilliwack, BC
@@ -212,11 +217,11 @@ document.getElementById('shareBtn').addEventListener('click', async ()=>{
   const shareBtn = document.getElementById('shareBtn');
   shareBtn.disabled = true; shareBtn.textContent = 'Sharing…';
   try{
-    const docRef = await db.collection('routes').add({
+    const docRef = await addDoc(collection(db,'routes'), {
       ownerId: currentUser.uid,
       public: true,
       ...lastRoute,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      createdAt: serverTimestamp()
     });
     const link = `${location.origin}${location.pathname}?route=${docRef.id}`;
     await navigator.clipboard.writeText(link).catch(()=>{});
@@ -234,8 +239,8 @@ async function loadSharedRouteFromURL(){
   const routeId = params.get('route');
   if(!routeId) return;
   try{
-    const snap = await db.collection('routes').doc(routeId).get();
-    if(!snap.exists) return;
+    const snap = await getDoc(doc(db, 'routes', routeId));
+    if(!snap.exists()) return;
     const r = snap.data();
     const start = L.latLng(r.startLat, r.startLon), end = L.latLng(r.endLat, r.endLon);
     L.marker(start, {icon:trailPin}).addTo(map);
@@ -258,7 +263,7 @@ async function loadSharedRouteFromURL(){
 }
 
 // ---------------- Auth (silent/anonymous — no login screen) ----------------
-auth.onAuthStateChanged((user)=>{
+onAuthStateChanged(auth, (user)=>{
   currentUser = user;
   if(user){
     subscribeSavedPlaces();
@@ -275,7 +280,7 @@ auth.onAuthStateChanged((user)=>{
 // dropping the action or showing a login prompt.
 function whenReady(fn){
   if(currentUser){ fn(); return; }
-  const unsub = auth.onAuthStateChanged((user)=>{ if(user){ unsub(); fn(); } });
+  const unsub = onAuthStateChanged(auth, (user)=>{ if(user){ unsub(); fn(); } });
 }
 
 // ---------------- Saved places ----------------
@@ -284,61 +289,60 @@ async function toggleSavePlace(p, btn){
   const key = placeKey(p.lat, p.lon);
   if(savedPlaceKeys.has(key)){
     const existing = window._savedDocs?.find(d => placeKey(d.lat,d.lon) === key);
-    if(existing) await db.collection('places').doc(existing.id).delete();
+    if(existing) await deleteDoc(doc(db,'places', existing.id));
   } else {
-    await db.collection('places').add({
-      ownerId: currentUser.uid, name:p.name, address:p.address||'', lat:p.lat, lon:p.lon,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    await addDoc(collection(db,'places'), {
+      ownerId: currentUser.uid, name:p.name, address:p.address||'', lat:p.lat, lon:p.lon, createdAt: serverTimestamp()
     });
   }
   if(btn){ btn.classList.toggle('saved'); btn.innerHTML = starSvg(btn.classList.contains('saved')); }
 }
 
 function subscribeSavedPlaces(){
-  db.collection('places').where('ownerId','==',currentUser.uid).orderBy('createdAt','desc')
-    .onSnapshot((snap)=>{
-      const items = [];
-      savedPlaceKeys.clear();
-      snap.forEach(d=>{ const data = {id:d.id, ...d.data()}; items.push(data); savedPlaceKeys.add(placeKey(data.lat,data.lon)); });
-      window._savedDocs = items;
-      renderPanelList('savedList', items, (item)=>`
-        <div class="pi-info"><div class="pi-name">${item.name}</div><div class="pi-sub">${item.lat.toFixed(4)}, ${item.lon.toFixed(4)}</div></div>
-      `, (item)=>{
-        if(searchMarker) map.removeLayer(searchMarker);
-        searchMarker = L.marker([item.lat,item.lon], {icon:amberPin}).addTo(map).bindPopup(popupHtml(item.name, item.address, item.lat, item.lon)).openPopup();
-        map.setView([item.lat,item.lon], 15, {animate:true});
-        document.getElementById('savedPanel').classList.remove('open');
-      }, async (item)=>{ await db.collection('places').doc(item.id).delete(); },
-      'Nothing saved yet — star a place from search or a map pin.');
-    });
+  const q = query(collection(db,'places'), where('ownerId','==',currentUser.uid), orderBy('createdAt','desc'));
+  onSnapshot(q, (snap)=>{
+    const items = [];
+    savedPlaceKeys.clear();
+    snap.forEach(d=>{ const data = {id:d.id, ...d.data()}; items.push(data); savedPlaceKeys.add(placeKey(data.lat,data.lon)); });
+    window._savedDocs = items;
+    renderPanelList('savedList', items, (item)=>`
+      <div class="pi-info"><div class="pi-name">${item.name}</div><div class="pi-sub">${item.lat.toFixed(4)}, ${item.lon.toFixed(4)}</div></div>
+    `, (item)=>{
+      if(searchMarker) map.removeLayer(searchMarker);
+      searchMarker = L.marker([item.lat,item.lon], {icon:amberPin}).addTo(map).bindPopup(popupHtml(item.name, item.address, item.lat, item.lon)).openPopup();
+      map.setView([item.lat,item.lon], 15, {animate:true});
+      document.getElementById('savedPanel').classList.remove('open');
+    }, async (item)=>{ await deleteDoc(doc(db,'places', item.id)); },
+    'Nothing saved yet — star a place from search or a map pin.');
+  });
 }
 
 // ---------------- Search history ----------------
 async function logSearchHistory(entry){
   if(!currentUser){ whenReady(()=>logSearchHistory(entry)); return; }
-  await db.collection('history').add({ ownerId: currentUser.uid, ...entry, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+  await addDoc(collection(db,'history'), { ownerId: currentUser.uid, ...entry, timestamp: serverTimestamp() });
   // trim to last 20
-  db.collection('history').where('ownerId','==',currentUser.uid).orderBy('timestamp','desc').limit(50)
-    .onSnapshot((snap)=>{
-      const docs = snap.docs;
-      if(docs.length > 20){ docs.slice(20).forEach(d=> db.collection('history').doc(d.id).delete()); }
-    }, ()=>{});
+  const q = query(collection(db,'history'), where('ownerId','==',currentUser.uid), orderBy('timestamp','desc'), limit(50));
+  onSnapshot(q, (snap)=>{
+    const docs = snap.docs;
+    if(docs.length > 20){ docs.slice(20).forEach(d=> deleteDoc(doc(db,'history', d.id))); }
+  }, ()=>{});
 }
 
 function subscribeHistory(){
-  db.collection('history').where('ownerId','==',currentUser.uid).orderBy('timestamp','desc').limit(20)
-    .onSnapshot((snap)=>{
-      const items = []; snap.forEach(d=> items.push({id:d.id, ...d.data()}));
-      renderPanelList('historyList', items, (item)=>`
-        <div class="pi-info"><div class="pi-name">${item.name}</div><div class="pi-sub">${item.lat.toFixed(4)}, ${item.lon.toFixed(4)}</div></div>
-      `, (item)=>{
-        if(searchMarker) map.removeLayer(searchMarker);
-        searchMarker = L.marker([item.lat,item.lon], {icon:amberPin}).addTo(map).bindPopup(popupHtml(item.name, '', item.lat, item.lon)).openPopup();
-        map.setView([item.lat,item.lon], 15, {animate:true});
-        document.getElementById('historyPanel').classList.remove('open');
-      }, async (item)=>{ await db.collection('history').doc(item.id).delete(); },
-      'No searches yet — look something up.');
-    });
+  const q = query(collection(db,'history'), where('ownerId','==',currentUser.uid), orderBy('timestamp','desc'), limit(20));
+  onSnapshot(q, (snap)=>{
+    const items = []; snap.forEach(d=> items.push({id:d.id, ...d.data()}));
+    renderPanelList('historyList', items, (item)=>`
+      <div class="pi-info"><div class="pi-name">${item.name}</div><div class="pi-sub">${item.lat.toFixed(4)}, ${item.lon.toFixed(4)}</div></div>
+    `, (item)=>{
+      if(searchMarker) map.removeLayer(searchMarker);
+      searchMarker = L.marker([item.lat,item.lon], {icon:amberPin}).addTo(map).bindPopup(popupHtml(item.name, '', item.lat, item.lon)).openPopup();
+      map.setView([item.lat,item.lon], 15, {animate:true});
+      document.getElementById('historyPanel').classList.remove('open');
+    }, async (item)=>{ await deleteDoc(doc(db,'history', item.id)); },
+    'No searches yet — look something up.');
+  });
 }
 
 // ---------------- Panels ----------------
