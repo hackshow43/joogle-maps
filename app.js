@@ -26,8 +26,16 @@ let savedPlaceKeys = new Set(); // `${lat.toFixed(5)},${lon.toFixed(5)}` for qui
 signInAnonymously(auth).catch(err => console.error('Anonymous sign-in failed:', err));
 
 // ---------------- Map setup ----------------
-const map = L.map('map', { zoomControl:false }).setView([49.1579, -121.9514], 12); // Chilliwack, BC
+const map = L.map('map', { zoomControl:false }).setView([49.1579, -121.9514], 12); // Chilliwack, BC — fallback until/unless geolocation resolves
 L.control.zoom({ position:'bottomright' }).addTo(map);
+
+// Center on the user's actual location as soon as the app opens, if they allow it.
+if(navigator.geolocation){
+  navigator.geolocation.getCurrentPosition(
+    pos => map.setView([pos.coords.latitude, pos.coords.longitude], 15),
+    () => { /* denied or unavailable — keep the default view above */ }
+  );
+}
 
 const humanitarianLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', { maxZoom:20, subdomains:'abc', attribution:'' }).addTo(map);
 const cyclosmLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', { maxZoom:20, subdomains:'abc', attribution:'' });
@@ -178,15 +186,24 @@ function popupHtml(name, address, lat, lon){
   const key = placeKey(lat, lon);
   const isSaved = savedPlaceKeys.has(key);
   return `<b>${name}</b><br>${address}
-    <div class="popup-save"><button class="pill-btn ${isSaved?'primary':'ghost'}" data-popup-save='${JSON.stringify({name,address,lat,lon}).replace(/'/g,"&apos;")}'>${isSaved ? 'Saved ★' : 'Save this place'}</button></div>`;
+    <div class="popup-actions">
+      <button class="pill-btn primary" data-popup-directions="${lat},${lon}">Directions</button>
+      <button class="pill-btn ${isSaved?'primary':'ghost'}" data-popup-save='${JSON.stringify({name,address,lat,lon}).replace(/'/g,"&apos;")}'>${isSaved ? 'Saved ★' : 'Save this place'}</button>
+    </div>`;
 }
 map.on('popupopen', (e)=>{
-  const btn = e.popup._contentNode.querySelector('[data-popup-save]');
-  if(btn) btn.addEventListener('click', ()=>{
-    const p = JSON.parse(btn.dataset.popupSave.replace(/&apos;/g,"'"));
+  const saveBtn = e.popup._contentNode.querySelector('[data-popup-save]');
+  if(saveBtn) saveBtn.addEventListener('click', ()=>{
+    const p = JSON.parse(saveBtn.dataset.popupSave.replace(/&apos;/g,"'"));
     toggleSavePlace(p, null);
-    btn.textContent = savedPlaceKeys.has(placeKey(p.lat,p.lon)) ? 'Saved ★' : 'Save this place';
-    btn.className = 'pill-btn ' + (savedPlaceKeys.has(placeKey(p.lat,p.lon)) ? 'primary' : 'ghost');
+    saveBtn.textContent = savedPlaceKeys.has(placeKey(p.lat,p.lon)) ? 'Saved ★' : 'Save this place';
+    saveBtn.className = 'pill-btn ' + (savedPlaceKeys.has(placeKey(p.lat,p.lon)) ? 'primary' : 'ghost');
+  });
+  const dirBtn = e.popup._contentNode.querySelector('[data-popup-directions]');
+  if(dirBtn) dirBtn.addEventListener('click', ()=>{
+    const [lat, lon] = dirBtn.dataset.popupDirections.split(',').map(Number);
+    map.closePopup();
+    startDirectionsTo(lat, lon);
   });
 });
 
@@ -235,6 +252,58 @@ document.getElementById('rcClose').addEventListener('click', ()=>{
   routeMode=false; routeBtn.classList.remove('active'); routeCard.classList.remove('show'); resetRoute();
 });
 
+function computeAndDrawRoute(a, b){
+  rcHint.textContent = 'Calculating the trail…';
+  fetch(`https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`)
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.routes || !data.routes.length){ rcHint.textContent='No route found between those points.'; return; }
+      const route = data.routes[0];
+      const coords = route.geometry.coordinates.map(c=>[c[1],c[0]]);
+      if(routeLine) map.removeLayer(routeLine);
+      routeLine = L.polyline(coords, {color:'#E8871E', weight:5, opacity:0.9, className:'route-line'}).addTo(map);
+      map.fitBounds(routeLine.getBounds(), {padding:[60,60]});
+      rcDist.textContent = (route.distance/1000).toFixed(1) + ' km';
+      const mins = Math.round(route.duration/60);
+      rcTime.textContent = mins < 60 ? mins+' min' : Math.floor(mins/60)+'h '+(mins%60)+'m';
+      rcHint.textContent = 'Click anywhere to plot a new route.';
+      rcActions.style.display = 'flex';
+      lastRoute = {
+        startLat:a.lat, startLon:a.lng, endLat:b.lat, endLon:b.lng,
+        distanceM: route.distance, durationS: route.duration
+      };
+    })
+    .catch(()=>{ rcHint.textContent='Routing service is out for a walk. Try again shortly.'; });
+}
+
+// Directions from a popup's "Directions" button: opens the route card, gets the user's
+// current location as the start point (falling back to the map's current center if
+// geolocation is denied/unavailable), and routes straight to the given destination.
+function startDirectionsTo(lat, lon){
+  const end = L.latLng(lat, lon);
+  routeMode = true;
+  routeBtn.classList.add('active');
+  routeCard.classList.add('show');
+  resetRoute();
+  rcHint.textContent = 'Finding your location…';
+
+  function proceedWithStart(start){
+    routePoints = [start, end];
+    routeMarkers.push(L.marker(start, {icon:trailPin}).addTo(map));
+    routeMarkers.push(L.marker(end, {icon:amberPin}).addTo(map));
+    computeAndDrawRoute(start, end);
+  }
+
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      pos => proceedWithStart(L.latLng(pos.coords.latitude, pos.coords.longitude)),
+      () => { rcHint.textContent = 'Location unavailable — starting from the map center.'; proceedWithStart(map.getCenter()); }
+    );
+  } else {
+    proceedWithStart(map.getCenter());
+  }
+}
+
 map.on('click', (e)=>{
   if(!routeMode) return;
   if(routePoints.length >= 2) resetRoute();
@@ -245,28 +314,8 @@ map.on('click', (e)=>{
   if(routePoints.length === 1){
     rcHint.textContent = 'Start pinned. Click your destination.';
   } else {
-    rcHint.textContent = 'Calculating the trail…';
     const [a,b] = routePoints;
-    fetch(`https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`)
-      .then(r=>r.json())
-      .then(data=>{
-        if(!data.routes || !data.routes.length){ rcHint.textContent='No route found between those points.'; return; }
-        const route = data.routes[0];
-        const coords = route.geometry.coordinates.map(c=>[c[1],c[0]]);
-        if(routeLine) map.removeLayer(routeLine);
-        routeLine = L.polyline(coords, {color:'#E8871E', weight:5, opacity:0.9, className:'route-line'}).addTo(map);
-        map.fitBounds(routeLine.getBounds(), {padding:[60,60]});
-        rcDist.textContent = (route.distance/1000).toFixed(1) + ' km';
-        const mins = Math.round(route.duration/60);
-        rcTime.textContent = mins < 60 ? mins+' min' : Math.floor(mins/60)+'h '+(mins%60)+'m';
-        rcHint.textContent = 'Click anywhere to plot a new route.';
-        rcActions.style.display = 'flex';
-        lastRoute = {
-          startLat:a.lat, startLon:a.lng, endLat:b.lat, endLon:b.lng,
-          distanceM: route.distance, durationS: route.duration
-        };
-      })
-      .catch(()=>{ rcHint.textContent='Routing service is out for a walk. Try again shortly.'; });
+    computeAndDrawRoute(a, b);
   }
 });
 
