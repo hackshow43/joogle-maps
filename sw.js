@@ -1,4 +1,4 @@
-const CACHE = 'joogle-maps-v1';
+const CACHE = 'joogle-maps-v2';
 const SHELL = [
   './',
   './index.html',
