@@ -29,15 +29,33 @@ signInAnonymously(auth).catch(err => console.error('Anonymous sign-in failed:', 
 const map = L.map('map', { zoomControl:false }).setView([49.1579, -121.9514], 12); // Chilliwack, BC
 L.control.zoom({ position:'bottomright' }).addTo(map);
 
-const streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'' }).addTo(map);
+const humanitarianLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', { maxZoom:20, subdomains:'abc', attribution:'' }).addTo(map);
+const cyclosmLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', { maxZoom:20, subdomains:'abc', attribution:'' });
 const terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom:17, attribution:'' });
 
-let terrainOn = false;
-document.getElementById('terrainBtn').addEventListener('click', (e)=>{
-  terrainOn = !terrainOn;
-  e.currentTarget.classList.toggle('active', terrainOn);
-  if(terrainOn){ map.removeLayer(streetLayer); terrainLayer.addTo(map); }
-  else { map.removeLayer(terrainLayer); streetLayer.addTo(map); }
+// Three states, but only ever relative to Normal: Bike and Terrain each toggle
+// directly against Normal, not against each other. Clicking Bike while in Terrain
+// (or vice versa) switches straight to that layer, not a combined/stacked state.
+let baseState = 'normal'; // 'normal' | 'bike' | 'terrain'
+
+function setBaseLayer(layer){
+  [humanitarianLayer, cyclosmLayer, terrainLayer].forEach(l => { if(map.hasLayer(l)) map.removeLayer(l); });
+  layer.addTo(map);
+}
+function applyBaseState(){
+  document.getElementById('terrainBtn').classList.toggle('active', baseState === 'terrain');
+  document.getElementById('cyclosmBtn').classList.toggle('active', baseState === 'bike');
+  setBaseLayer(baseState === 'terrain' ? terrainLayer : baseState === 'bike' ? cyclosmLayer : humanitarianLayer);
+}
+
+document.getElementById('terrainBtn').addEventListener('click', ()=>{
+  baseState = (baseState === 'terrain') ? 'normal' : 'terrain';
+  applyBaseState();
+});
+
+document.getElementById('cyclosmBtn').addEventListener('click', ()=>{
+  baseState = (baseState === 'bike') ? 'normal' : 'bike';
+  applyBaseState();
 });
 document.getElementById('darkBtn').addEventListener('click', (e)=>{
   document.getElementById('map').classList.toggle('dark');
@@ -90,12 +108,20 @@ function resultSecondary(d){
 
 function runSearch(q){
   if(!q || q.length < 3){ resultsBox.classList.remove('show'); resultsBox.innerHTML=''; return; }
-  // Bias toward what's currently on screen (bounded=0 = preference, not a hard filter) so
-  // "14 E 7th Ave" while looking at Vancouver ranks the Vancouver match first, without
-  // hiding a genuinely better match elsewhere if nothing local fits.
+  // Bias toward the surrounding region, not just the exact current viewport — zooming into
+  // one neighbourhood (e.g. Burnaby) shouldn't drop nearby Vancouver out of the "local" box.
+  // REGION_HALF_* set a floor of roughly a 150km radius around the map's center; if you're
+  // zoomed out further than that, the real (larger) viewport is used instead.
+  const REGION_HALF_LAT = 1.4;   // ~155km north/south
+  const REGION_HALF_LON = 2.2;   // ~160km east/west at this latitude
+  const center = map.getCenter();
   const b = map.getBounds();
-  const viewbox = `${b.getWest()},${b.getNorth()},${b.getEast()},${b.getSouth()}`;
-  fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&viewbox=${viewbox}&bounded=0&q=${encodeURIComponent(q)}`)
+  const halfLat = Math.max(REGION_HALF_LAT, (b.getNorth()-b.getSouth())/2);
+  const halfLon = Math.max(REGION_HALF_LON, (b.getEast()-b.getWest())/2);
+  const viewbox = `${center.lng-halfLon},${center.lat+halfLat},${center.lng+halfLon},${center.lat-halfLat}`;
+  // countrycodes is a hard filter (unlike viewbox/bounded, which only bias ranking) — this is
+  // what actually keeps unrelated matches like Colombia out, rather than just deprioritizing them.
+  fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&viewbox=${viewbox}&bounded=0&countrycodes=ca,us&q=${encodeURIComponent(q)}`)
     .then(r=>r.json())
     .then(data=>{
       if(!data.length){ resultsBox.innerHTML = '<div class="result-item"><span class="r-info"><span class="r-name">No spots found.</span><span class="r-type">try a broader search</span></span></div>'; resultsBox.classList.add('show'); return; }
