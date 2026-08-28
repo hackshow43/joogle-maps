@@ -44,7 +44,7 @@
   <button class="tool-btn" id="locateBtn"><span class="tip">Find me</span>
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
   </button>
-  <button class="tool-btn" id="routeBtn"><span class="tip">Plot a route</span>
+  <button class="tool-btn" id="routeBtn"><span class="tip">Directions</span>
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="5" r="2.2"/><path d="M6 16.8V13a4 4 0 0 1 4-4h2a4 4 0 0 0 4-4"/></svg>
   </button>
   <button class="tool-btn" id="terrainBtn"><span class="tip">Toggle terrain</span>
@@ -67,8 +67,15 @@
   </div>
   <div class="rc-hint" id="rcHint">Click a start point, then an end point on the map.</div>
   <div class="rc-actions" id="rcActions" style="display:none;">
-    <button class="pill-btn primary" id="shareBtn">Copy share link</button>
+    <button class="pill-btn primary" id="navBtn">Start navigation</button>
+    <button class="pill-btn ghost" id="shareBtn">Copy share link</button>
   </div>
+</div>
+
+<div class="nav-banner" id="navBanner">
+  <span class="nav-dot"></span>
+  <span id="navBannerText">Navigating…</span>
+  <button class="pill-btn ghost" id="navStopBtn">Stop</button>
 </div>
 
 <div class="credit">map data © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors</div>

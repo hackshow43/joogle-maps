@@ -232,6 +232,7 @@ const rcActions = document.getElementById('rcActions');
 const rcTitleText = document.getElementById('rcTitleText');
 
 function resetRoute(){
+  stopNavigation();
   routePoints = [];
   routeMarkers.forEach(m=>map.removeLayer(m)); routeMarkers=[];
   if(routeLine){ map.removeLayer(routeLine); routeLine=null; }
@@ -249,8 +250,77 @@ routeBtn.addEventListener('click', ()=>{
   if(routeMode) resetRoute();
 });
 document.getElementById('rcClose').addEventListener('click', ()=>{
+  stopNavigation();
   routeMode=false; routeBtn.classList.remove('active'); routeCard.classList.remove('show'); resetRoute();
 });
+
+// ---------------- Navigation (follow-me mode) ----------------
+// No 3D, no rotation, no turn-by-turn — just continuous GPS tracking that keeps
+// the map centered on you while a route is showing. Only works while this tab/PWA
+// is open and in the foreground; browsers don't allow reliable background tracking
+// for websites the way a native nav app can.
+let navWatchId = null;
+let navMarker = null;
+let navAccuracyCircle = null;
+let wakeLock = null;
+const navBanner = document.getElementById('navBanner');
+const navBannerText = document.getElementById('navBannerText');
+
+// Keeps the screen from auto-locking while navigating. The OS/browser force-releases
+// this the instant the tab is hidden (switch apps, lock the phone) — that's a platform
+// rule, not something we can override — so we reacquire it if the tab becomes visible
+// again mid-navigation (e.g. you glanced at another app and came back).
+async function requestWakeLock(){
+  if(!('wakeLock' in navigator)) return;
+  try{
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', ()=>{ wakeLock = null; });
+  } catch(err){ /* denied, unsupported mid-request, etc. — navigation still works, screen may just sleep */ }
+}
+function releaseWakeLock(){
+  if(wakeLock){ wakeLock.release(); wakeLock = null; }
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && navWatchId !== null && !wakeLock){
+    requestWakeLock();
+  }
+});
+
+function startNavigation(){
+  if(!navigator.geolocation){ alert("This browser won't share your location for navigation."); return; }
+  if(navWatchId !== null) return; // already navigating
+  routeMode = false; // don't let map clicks add new route points while navigating
+  navBanner.classList.add('show');
+  navBannerText.textContent = 'Finding your location…';
+  requestWakeLock();
+
+  navWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      if(!navMarker){ navMarker = L.marker(latlng, {icon:trailPin, zIndexOffset:1000}).addTo(map); }
+      else navMarker.setLatLng(latlng);
+      if(navAccuracyCircle) map.removeLayer(navAccuracyCircle);
+      navAccuracyCircle = L.circle(latlng, {
+        radius: pos.coords.accuracy || 20, color:'#2F6E4F', fillColor:'#2F6E4F', fillOpacity:0.15, weight:1
+      }).addTo(map);
+      map.setView(latlng, Math.max(map.getZoom(), 17), {animate:true});
+      navBannerText.textContent = 'Navigating…';
+    },
+    err => { navBannerText.textContent = err.code === 1 ? 'Location permission denied.' : 'Location signal lost — retrying…'; },
+    { enableHighAccuracy:true, maximumAge:2000, timeout:15000 }
+  );
+}
+
+function stopNavigation(){
+  if(navWatchId !== null){ navigator.geolocation.clearWatch(navWatchId); navWatchId = null; }
+  if(navMarker){ map.removeLayer(navMarker); navMarker = null; }
+  if(navAccuracyCircle){ map.removeLayer(navAccuracyCircle); navAccuracyCircle = null; }
+  navBanner.classList.remove('show');
+  releaseWakeLock();
+}
+
+document.getElementById('navBtn').addEventListener('click', startNavigation);
+document.getElementById('navStopBtn').addEventListener('click', stopNavigation);
 
 function computeAndDrawRoute(a, b){
   rcHint.textContent = 'Calculating the trail…';

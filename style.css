@@ -134,6 +134,24 @@ html,body{height:100%;margin:0;font-family:'Inter',sans-serif;background:var(--i
 .pill-btn.ghost{background:var(--fog); color:var(--ink);}
 .pill-btn:disabled{opacity:.5; cursor:default; transform:none;}
 
+/* ---------- Navigation (follow-me) banner ---------- */
+.nav-banner{
+  position:absolute; top:80px; left:50%; transform:translateX(-50%);
+  z-index:15; display:none; align-items:center; gap:10px;
+  background:var(--trail); color:var(--chalk); padding:10px 12px 10px 16px;
+  border-radius:999px; box-shadow:var(--shadow); font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
+}
+.nav-banner.show{display:flex;}
+.nav-banner .nav-dot{
+  width:9px; height:9px; border-radius:50%; background:var(--amber);
+  animation:nav-pulse 1.4s ease-in-out infinite;
+}
+@keyframes nav-pulse{
+  0%,100%{opacity:1; transform:scale(1);}
+  50%{opacity:.4; transform:scale(0.7);}
+}
+.nav-banner .pill-btn{padding:5px 12px; font-size:12px;}
+
 /* ---------- Credit strip ---------- */
 .credit{
   position:absolute; right:18px; bottom:14px; z-index:10;
