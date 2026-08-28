@@ -157,6 +157,12 @@ searchInput.addEventListener('input', (e)=>{
 document.getElementById('searchBtn').addEventListener('click', ()=>runSearch(searchInput.value.trim()));
 searchInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') runSearch(searchInput.value.trim()); });
 
+// Mobile fix: tapping a result normally blurs the search input first (dismissing the
+// on-screen keyboard), which shrinks the viewport and shifts layout mid-tap — many mobile
+// browsers then drop the click entirely. Blocking that default keeps focus/layout stable
+// through the tap, so the click below actually fires; we blur manually once handled instead.
+resultsBox.addEventListener('mousedown', (e)=> e.preventDefault());
+
 resultsBox.addEventListener('click', (e)=>{
   const saveBtn = e.target.closest('[data-save-idx]');
   const item = e.target.closest('.result-item');
@@ -178,6 +184,7 @@ resultsBox.addEventListener('click', (e)=>{
     map.setView([lat,lon], 15, {animate:true});
     resultsBox.classList.remove('show');
     searchInput.value = name;
+    searchInput.blur();
     logSearchHistory({ name, lat, lon });
   }
 });
